@@ -103,6 +103,22 @@ This Milistra Wonderland is still under active development. Please feel free to 
 using Github [Issues](https://github.com/teyvalon/nasha-town/issues). The roadmap and work-in-progress will be
 shared here soon, stay tuned!
 
+## CLI Simulator
+
+A local command-line game simulator is included for testing and development. You play as the only human player,
+with AI opponents filling the remaining seats.
+
+**Requirements:** [uv](https://docs.astral.sh/uv/getting-started/installation/)
+
+**Run:**
+
+```bash
+uv run main.py
+```
+
+You will be prompted to choose the number of players (5-8) and game mode (Basic / Prophecy / Veil). The AI uses
+role-aware logic described in [`ai-v1.md`](ai-v1.md).
+
 ## Community
 
 * GitHub [Discussions](https://github.com/teyvalon/nasha-town/discussions)

@@ -1,0 +1,6 @@
+[project]
+name = "teyvalon"
+version = "0.1.0"
+description = "A social deduction Milistra Wonderland in Genshin Impact."
+requires-python = ">=3.14"
+dependencies = []

@@ -73,6 +73,20 @@
 
 这个奇域仍在活跃开发中，欢迎通过 GitHub [Issues](https://github.com/teyvalon/nasha-town/issues) 报告缺陷、问题或建议。路线图和进行中的工作将在此处分享，敬请期待！
 
+## 命令行模拟器
+
+项目内置了一个本地命令行游戏模拟器，用于测试和开发。你将作为唯一的真人玩家，其余席位由 AI 填充。
+
+**环境要求：** [uv](https://docs.astral.sh/uv/getting-started/installation/)
+
+**运行：**
+
+```bash
+uv run main.py
+```
+
+启动后会提示选择玩家人数（5-8）和游戏模式（基础局 / 预言局 / 迷雾局）。AI 使用基于角色的决策逻辑，详见 [`ai-v1.md`](ai-v1.md)。
+
 ## 游戏社区
 
 * GitHub [Discussions](https://github.com/teyvalon/nasha-town/discussions)
