@@ -398,19 +398,22 @@ class BayesianAIPlayer(Player):
             p_succ = 1.0 - self._p_fail(team, wave)
             return p_succ >= self._tau
         else:
-            # Abyssal voting: blend "want mission to fail" with
-            # "act like a good player to avoid detection"
-            p_fail = self._p_fail(team, wave)
-            evil_desire = _sigmoid(BETA * (p_fail - 0.5))
-            # Also compute what a good player would vote
-            p_succ = 1.0 - p_fail
-            good_cover = 1.0 if p_succ >= self._tau else 0.0
-            # Blend: smaller games need more cover
-            cover_weight = 0.3 if self._num_players <= 5 else 0.15
-            prob_yes = (1.0 - cover_weight) * evil_desire + cover_weight * good_cover
-            if random.random() < 0.1:
-                return random.choice([True, False])
-            return random.random() < prob_yes
+            allies = set(self.known_info.get("abyssal_allies", []))
+            has_self = self in team
+            has_ally = any(p in allies for p in team)
+
+            if has_self or has_ally:
+                # Want to approve, but add noise to avoid detection
+                # Self on team: almost always approve (but not 100%)
+                # Only ally: less eager — don't want correlated patterns
+                base_approve = 0.9 if has_self else 0.65
+                return random.random() < base_approve
+            else:
+                # No Abyssal on team: vote like a good player
+                p_succ = 1.0 - self._p_fail(team, wave)
+                if random.random() < 0.1:
+                    return random.choice([True, False])
+                return p_succ >= self._tau
 
     # ── Place bomb ───────────────────────────────────────────────
 
