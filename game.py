@@ -33,11 +33,13 @@ class Game:
         num_players: int = 5,
         mode: GameMode = GameMode.PROPHECY,
         max_proposals: int = DEFAULT_MAX_PROPOSALS,
+        ai_class: type[Player] = AIPlayer,
     ):
         assert num_players in CAMP_SIZES, f"Unsupported player count: {num_players}"
         self.num_players = num_players
         self.mode = mode
         self.max_proposals = max_proposals
+        self.ai_class = ai_class
         self.players: list[Player] = []
         self.wave_sizes = WAVE_TEAM_SIZES[num_players]
         self.town_score = 0
@@ -53,10 +55,15 @@ class Game:
         # First player is always the human
         self.players.append(HumanPlayer("You", roles[0]))
         for i in range(1, self.num_players):
-            self.players.append(AIPlayer(AI_NAMES[i - 1], roles[i]))
+            self.players.append(self.ai_class(AI_NAMES[i - 1], roles[i]))
 
         self.leader_idx = random.randrange(self.num_players)
         self._night_phase()
+
+        # Initialize belief models (no-op for v1 AI)
+        num_evil = CAMP_SIZES[self.num_players][1]
+        for p in self.players:
+            p.init_beliefs(self.players, num_evil)
 
     def _make_roles(self) -> list[Role]:
         n_town, n_abyssal = CAMP_SIZES[self.num_players]
@@ -217,6 +224,10 @@ class Game:
                 print(f"{RED}{p.name}:N{RESET}  ", end="")
         print(f"\nResult: {CYAN}{approve} approve{RESET} / {RED}{reject} reject{RESET}", end="")
 
+        # Notify all players of the vote outcome
+        for p in self.players:
+            p.observe_team_vote(team, votes, wave)
+
         if approve > self.num_players / 2:
             print(f" — {GREEN}Approved!{RESET}")
             return True
@@ -230,7 +241,7 @@ class Game:
 
         bombs: list[bool] = []
         for p in team:
-            bombs.append(p.place_bomb(wave))
+            bombs.append(p.place_bomb(wave, team))
 
         fake_count = bombs.count(False)
 
@@ -244,6 +255,10 @@ class Game:
         real_str = f"{GREEN}{real_count} real{RESET}"
         fake_str = f"{RED}{fake_count} fake{RESET}" if fake_count else f"{DIM}0 fake{RESET}"
         print(f"\nBombs revealed: {real_str}, {fake_str}")
+
+        # Notify all players of mission result
+        for p in self.players:
+            p.observe_mission_result(team, fake_count, wave)
 
         # Rotate leader after mission
         self.leader_idx = (self.leader_idx + 1) % self.num_players

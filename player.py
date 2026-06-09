@@ -30,13 +30,28 @@ class Player:
         """Vote approve (True) or reject (False) on a proposed team."""
         raise NotImplementedError
 
-    def place_bomb(self, wave: int) -> bool:
+    def place_bomb(self, wave: int, team: list[Player] | None = None) -> bool:
         """Place a bomb: True = real, False = fake."""
         raise NotImplementedError
 
     def hunt_columbina(self, townsfolk: list[Player]) -> Player:
         """Rerir's end-game ability: pick who is Columbina among townsfolk."""
         raise NotImplementedError
+
+    # ── Observation hooks (overridden by advanced AI) ─────────
+
+    def init_beliefs(self, players: list[Player], num_evil: int) -> None:
+        """Called after night phase to initialize belief model."""
+
+    def observe_team_vote(
+        self, team: list[Player], votes: dict[Player, bool], wave: int
+    ) -> None:
+        """Called after each vote with the team and all votes."""
+
+    def observe_mission_result(
+        self, team: list[Player], num_fakes: int, wave: int
+    ) -> None:
+        """Called after each mission with the team and number of fake bombs."""
 
     def __repr__(self) -> str:
         return self.name
@@ -78,7 +93,7 @@ class HumanPlayer(Player):
                 return False
             print("Enter 'y' or 'n'.")
 
-    def place_bomb(self, wave):
+    def place_bomb(self, wave, team=None):
         if self.camp == Camp.TOWNSFOLK:
             print("You place a real bomb. (Townsfolk must place real bombs)")
             return True
@@ -190,7 +205,7 @@ class AIPlayer(Player):
 
     # ── Bomb ──────────────────────────────────────────────────────
 
-    def place_bomb(self, wave):
+    def place_bomb(self, wave, team=None):
         if self.camp == Camp.TOWNSFOLK:
             return True
         return False  # Abyssal always fakes

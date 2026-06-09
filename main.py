@@ -1,7 +1,9 @@
 """CLI entry point for TEYVALON: Nasha Town — Defend the Moon-Prayer Night."""
 
+from ai_v2 import BayesianAIPlayer
 from config import GameMode
 from game import Game
+from player import AIPlayer
 
 
 def _choose_int(prompt: str, low: int, high: int, default: int) -> int:
@@ -36,7 +38,14 @@ def main() -> None:
     mode_choice = _choose_int("> ", 1, 3, default=2)
     mode = modes[mode_choice]
 
-    game = Game(num_players=num_players, mode=mode)
+    print("\nSelect AI version:")
+    print("  1. v1 — rule-based (default)")
+    print("  2. v2 — Bayesian probability model")
+    ai_classes = {1: AIPlayer, 2: BayesianAIPlayer}
+    ai_choice = _choose_int("> ", 1, 2, default=1)
+    ai_class = ai_classes[ai_choice]
+
+    game = Game(num_players=num_players, mode=mode, ai_class=ai_class)
     game.run()
 
     print("\nThanks for playing TEYVALON!\n")

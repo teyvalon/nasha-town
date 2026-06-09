@@ -116,8 +116,15 @@ with AI opponents filling the remaining seats.
 uv run main.py
 ```
 
-You will be prompted to choose the number of players (5-8) and game mode (Basic / Prophecy / Veil). The AI uses
-role-aware logic described in [`ai-v1.md`](ai-v1.md).
+You will be prompted to choose the number of players (5-8), game mode (Basic / Prophecy / Veil), and AI version
+(v1 rule-based or v2 Bayesian). See [`ai-v1.md`](ai-v1.md) and [`ai-v2.md`](ai-v2.md) for algorithm details.
+
+**Benchmark:**
+
+```bash
+uv run benchmark.py         # default: v2, 500 games
+uv run benchmark.py v1 100  # v1 AI, 100 games
+```
 
 ## Community
 
