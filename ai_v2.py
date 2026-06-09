@@ -387,8 +387,10 @@ class BayesianAIPlayer(Player):
             abyssals = set(self.known_info.get("known_abyssals", []))
             has_evil = any(p in abyssals for p in team)
             true_vote = not has_evil
-            # Occasionally flip her vote to look like a regular townsfolk
-            if random.random() < self._disguise_rate(wave):
+            # Only disguise when the stakes aren't critical
+            # Never approve a bad team when Abyssals are close to winning
+            can_disguise = self._abyssal_score < 2
+            if can_disguise and random.random() < self._disguise_rate(wave):
                 return not true_vote
             return true_vote
 
