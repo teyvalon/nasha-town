@@ -394,6 +394,15 @@ class BayesianAIPlayer(Player):
                 return not true_vote
             return true_vote
 
+        if self.role == Role.LAUMA:
+            # If both moon-power players are on the team, one is Dottore —
+            # this team is guaranteed to have an Abyssal, always reject
+            moon = set(self.known_info.get("moon_power_players", []))
+            if sum(1 for p in team if p in moon) >= 2:
+                return False
+            p_succ = 1.0 - self._p_fail(team, wave)
+            return p_succ >= self._tau
+
         if self.camp == Camp.TOWNSFOLK:
             p_succ = 1.0 - self._p_fail(team, wave)
             return p_succ >= self._tau
