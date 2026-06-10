@@ -115,10 +115,10 @@ class BayesianAIPlayer(Player):
         5p: ally_damp=0.55, good_amp=1.15  (gentle bias)
         8p: ally_damp=0.30, good_amp=1.40  (full bias)
         """
-        # Scale by number of evil: 2 evil = subtle, 3 evil = stronger
+        # Scale by number of evil: 2 evil = very subtle, 3 evil = stronger
         # (5p=2e, 6p=2e, 7p=3e, 8p=3e)
         t = max(0.0, (self._num_evil - 2) / 1.0)  # 0.0 for 2 evil, 1.0 for 3 evil
-        ally_damp = 0.70 + t * (COVER_ALLY_DAMP_BASE - 0.70)   # 2e: 0.70, 3e: 0.30
+        ally_damp = 0.75 + t * (COVER_ALLY_DAMP_BASE - 0.75)   # 2e: 0.75, 3e: 0.30
         good_amp = 1.08 + t * (COVER_GOOD_AMP_BASE - 1.08)     # 2e: 1.08, 3e: 1.40
         return ally_damp, good_amp
 
@@ -373,6 +373,15 @@ class BayesianAIPlayer(Player):
         self._tau = max(TAU_MIN, TAU_INIT - 0.05 * self._consecutive_fails)
         self._cover_tau = self._tau  # keep in sync
 
+        # Suspicion floor: if I'm good and on this team, I know all fakes
+        # came from teammates, so each has at least f/(team_size-1) suspicion.
+        self_good_on_team = self in team and self.camp == Camp.TOWNSFOLK
+        if self_good_on_team and num_fakes > 0:
+            teammates = [p for p in team if p is not self]
+            floor_logodds = _prob_to_logodds(_clamp(num_fakes / max(len(teammates), 1)))
+        else:
+            floor_logodds = None
+
         # Update beliefs using exact fake count, not just pass/fail
         for j in team:
             if j is self:
@@ -410,6 +419,8 @@ class BayesianAIPlayer(Player):
             lr = num / den
             if lr > 0:
                 self._logodds[j] = self._logodds.get(j, 0.0) + math.log(lr)
+            if floor_logodds is not None:
+                self._logodds[j] = max(self._logodds.get(j, 0.0), floor_logodds)
 
             # Update cover beliefs with biased evidence
             if self.camp == Camp.ABYSSAL:
