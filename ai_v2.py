@@ -183,6 +183,22 @@ class BayesianAIPlayer(Player):
             new_b = _clamp(old_b * scale)
             self._logodds[p] = _prob_to_logodds(new_b)
 
+        # Lauma constraint: moon-power pair must be one good + one evil.
+        # If one's suspicion is x, the other's should tend toward 1-x.
+        if self.role == Role.LAUMA:
+            moon = self.known_info.get("moon_power_players", [])
+            if len(moon) == 2:
+                a, b_player = moon
+                ba = self._b(a)
+                bb = self._b(b_player)
+                # Target: ba + bb ≈ 1.0 (exactly one is evil)
+                # Blend each toward 1-other with damping
+                moon_damp = 0.6
+                new_ba = _clamp(ba + moon_damp * ((1.0 - bb) - ba))
+                new_bb = _clamp(bb + moon_damp * ((1.0 - ba) - bb))
+                self._logodds[a] = _prob_to_logodds(new_ba)
+                self._logodds[b_player] = _prob_to_logodds(new_bb)
+
     def _fails_needed(self, wave: int) -> int:
         if wave == 3 and self._num_players >= WAVE4_DOUBLE_FAIL_THRESHOLD:
             return 2
