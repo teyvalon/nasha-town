@@ -30,6 +30,12 @@ TAU_MIN = 0.3  # minimum threshold after consecutive failures
 DISGUISE_EARLY = 0.40  # early game: 40% chance to act "dumb"
 DISGUISE_LATE = 0.12   # late game: 12% (must actually help now)
 
+# ── Abyssal cover-belief bias ────────────────────────────────
+# When updating cover beliefs, evidence against allies is dampened
+# and evidence against good players is amplified.
+COVER_ALLY_DAMP_BASE = 0.3   # 30% of real evidence applied to allies
+COVER_GOOD_AMP_BASE = 1.4   # 140% of real evidence applied to good players
+
 
 # ── Math helpers ─────────────────────────────────────────────────────
 
@@ -82,10 +88,14 @@ class BayesianAIPlayer(Player):
     def __init__(self, name: str, role: Role):
         super().__init__(name, role)
         self._logodds: dict[Player, float] = {}
+        # Cover beliefs: Abyssal's "I'm a good player" worldview,
+        # initialized and updated as if they were generic Townsfolk.
+        self._cover_logodds: dict[Player, float] = {}
         self._all_players: list[Player] = []
         self._num_players = 0
         self._num_evil = 0
         self._tau = TAU_INIT
+        self._cover_tau = TAU_INIT
         self._consecutive_fails = 0
         self._town_score = 0
         self._abyssal_score = 0
@@ -98,6 +108,25 @@ class BayesianAIPlayer(Player):
         if p is self:
             return 1.0 if self.camp == Camp.ABYSSAL else 0.0
         return _logodds_to_prob(self._logodds.get(p, 0.0))
+
+    def _cover_bias(self) -> tuple[float, float]:
+        """Scaled cover-belief bias: subtler in small games, stronger in large.
+
+        5p: ally_damp=0.55, good_amp=1.15  (gentle bias)
+        8p: ally_damp=0.30, good_amp=1.40  (full bias)
+        """
+        # Scale by number of evil: 2 evil = subtle, 3 evil = stronger
+        # (5p=2e, 6p=2e, 7p=3e, 8p=3e)
+        t = max(0.0, (self._num_evil - 2) / 1.0)  # 0.0 for 2 evil, 1.0 for 3 evil
+        ally_damp = 0.70 + t * (COVER_ALLY_DAMP_BASE - 0.70)   # 2e: 0.70, 3e: 0.30
+        good_amp = 1.08 + t * (COVER_GOOD_AMP_BASE - 1.08)     # 2e: 1.08, 3e: 1.40
+        return ally_damp, good_amp
+
+    def _cover_b(self, p: Player) -> float:
+        """Cover-belief evil probability: 'if I were a good player'."""
+        if p is self:
+            return 0.0  # in the cover story, I'm good
+        return _logodds_to_prob(self._cover_logodds.get(p, 0.0))
 
     def _normalize_beliefs(self) -> None:
         """Adjust beliefs so they respect the global constraint: exactly E evil.
@@ -182,8 +211,28 @@ class BayesianAIPlayer(Player):
         """P(mission fails) for a given team, based on current beliefs."""
         n = len(team)
         fn = self._fails_needed(wave)
-        # Sum over all fake counts that cause failure
         return sum(self._p_fakes(team, wave, f) for f in range(fn, n + 1))
+
+    def _cover_p_fail(self, team: list[Player], wave: int) -> float:
+        """P(mission fails) from the cover-belief perspective."""
+        n = len(team)
+        fn = self._fails_needed(wave)
+        total = 0.0
+        for f in range(fn, n + 1):
+            sub = 0.0
+            for mask in range(1 << n):
+                prob = 1.0
+                k = 0
+                for i in range(n):
+                    bi = self._cover_b(team[i])
+                    if mask & (1 << i):
+                        prob *= bi
+                        k += 1
+                    else:
+                        prob *= 1.0 - bi
+                sub += prob * _p_fakes_given_k(f, k)
+            total += sub
+        return total
 
     def _p_accept(self, team: list[Player], wave: int) -> float:
         """P(proposal gets majority approval), given current beliefs."""
@@ -252,6 +301,18 @@ class BayesianAIPlayer(Player):
 
             self._logodds[j] = _prob_to_logodds(b)
 
+            # Cover beliefs for Abyssals: "I'm a generic Townsfolk" worldview
+            # Allies start slightly less suspicious, good players slightly more
+            if self.camp == Camp.ABYSSAL:
+                allies = self.known_info.get("abyssal_allies", [])
+                base = E / (N - 1)
+                ally_damp, _ = self._cover_bias()
+                if j in allies:
+                    cover_b = _clamp(base * ally_damp)
+                else:
+                    cover_b = _clamp(base)
+                self._cover_logodds[j] = _prob_to_logodds(cover_b)
+
     # ── Observation updates ──────────────────────────────────────
 
     def observe_team_vote(self, team, votes, wave):
@@ -260,6 +321,15 @@ class BayesianAIPlayer(Player):
 
         p_good_yes = EPSILON + (1.0 - 2 * EPSILON) * _sigmoid(ALPHA * (p_succ - 0.5))
         p_evil_yes = EPSILON + (1.0 - 2 * EPSILON) * _sigmoid(BETA * (p_fail - 0.5))
+
+        # Also compute cover-belief version for Abyssal disguise
+        if self.camp == Camp.ABYSSAL:
+            cover_p_fail = self._cover_p_fail(team, wave)
+            cover_p_succ = 1.0 - cover_p_fail
+            cover_p_good_yes = EPSILON + (1.0 - 2 * EPSILON) * _sigmoid(ALPHA * (cover_p_succ - 0.5))
+            cover_p_evil_yes = EPSILON + (1.0 - 2 * EPSILON) * _sigmoid(BETA * (cover_p_fail - 0.5))
+
+        allies = set(self.known_info.get("abyssal_allies", []))
 
         for voter, voted_yes in votes.items():
             if voter is self:
@@ -270,6 +340,22 @@ class BayesianAIPlayer(Player):
                 lr = (1.0 - p_evil_yes) / max(1.0 - p_good_yes, 1e-10)
             if lr > 0:
                 self._logodds[voter] = self._logodds.get(voter, 0.0) + math.log(lr)
+
+            # Update cover beliefs with biased evidence
+            if self.camp == Camp.ABYSSAL:
+                if voted_yes:
+                    cover_lr = cover_p_evil_yes / max(cover_p_good_yes, 1e-10)
+                else:
+                    cover_lr = (1.0 - cover_p_evil_yes) / max(1.0 - cover_p_good_yes, 1e-10)
+                if cover_lr > 0:
+                    log_lr = math.log(cover_lr)
+                    # Bias: dampen evidence against allies, amplify against others
+                    ally_damp, good_amp = self._cover_bias()
+                    if voter in allies:
+                        log_lr *= ally_damp
+                    else:
+                        log_lr *= good_amp
+                    self._cover_logodds[voter] = self._cover_logodds.get(voter, 0.0) + log_lr
 
         self._vote_history.append((list(team), dict(votes)))
         self._normalize_beliefs()
@@ -285,6 +371,7 @@ class BayesianAIPlayer(Player):
             self._consecutive_fails = 0
             self._town_score += 1
         self._tau = max(TAU_MIN, TAU_INIT - 0.05 * self._consecutive_fails)
+        self._cover_tau = self._tau  # keep in sync
 
         # Update beliefs using exact fake count, not just pass/fail
         for j in team:
@@ -324,6 +411,36 @@ class BayesianAIPlayer(Player):
             if lr > 0:
                 self._logodds[j] = self._logodds.get(j, 0.0) + math.log(lr)
 
+            # Update cover beliefs with biased evidence
+            if self.camp == Camp.ABYSSAL:
+                # Cover version: self is "good" (self_k = 0)
+                cover_obs_evil = 0.0
+                cover_obs_good = 0.0
+                for mask in range(1 << n_others):
+                    prob = 1.0
+                    k = 0
+                    for i in range(n_others):
+                        bi = self._cover_b(others[i])
+                        if mask & (1 << i):
+                            prob *= bi
+                            k += 1
+                        else:
+                            prob *= 1.0 - bi
+                    cover_obs_evil += prob * _p_fakes_given_k(num_fakes, k + 1)
+                    cover_obs_good += prob * _p_fakes_given_k(num_fakes, k)
+
+                cover_num = max(cover_obs_evil, 1e-10)
+                cover_den = max(cover_obs_good, 1e-10)
+                cover_lr = cover_num / cover_den
+                if cover_lr > 0:
+                    log_lr = math.log(cover_lr)
+                    ally_damp, good_amp = self._cover_bias()
+                    if j in set(self.known_info.get("abyssal_allies", [])):
+                        log_lr *= ally_damp
+                    else:
+                        log_lr *= good_amp
+                    self._cover_logodds[j] = self._cover_logodds.get(j, 0.0) + log_lr
+
         self._normalize_beliefs()
 
     # ── Columbina disguise ───────────────────────────────────────
@@ -349,13 +466,18 @@ class BayesianAIPlayer(Player):
                 p_acc = self._p_accept(team, wave)
                 u = p_succ * (p_acc ** LAMBDA)
             else:
-                # Evil: need at least one confirmed Abyssal on team
-                allies = set(self.known_info.get("abyssal_allies", []))
-                if not (self in team or any(p in allies for p in team)):
-                    continue
-                p_fail = self._p_fail(team, wave)
+                # Evil: blend real goal (want mission to fail) with
+                # cover goal (look like a good player picking safe teams).
+                # This avoids always picking allies (too obvious) or
+                # never picking them (too altruistic).
+                real_p_fail = self._p_fail(team, wave)
+                cover_p_succ = 1.0 - self._cover_p_fail(team, wave)
                 p_acc = self._p_accept(team, wave)
-                u = p_fail * (p_acc ** LAMBDA)
+                # More players → safer to pursue real goal
+                t = max(0.0, (self._num_players - 5) / 3.0)
+                real_weight = 0.2 + 0.3 * t  # 5p: 0.2, 8p: 0.5
+                blended = real_weight * real_p_fail + (1.0 - real_weight) * cover_p_succ
+                u = blended * (p_acc ** LAMBDA)
 
             if u > best_u:
                 best_u = u
@@ -407,22 +529,20 @@ class BayesianAIPlayer(Player):
             p_succ = 1.0 - self._p_fail(team, wave)
             return p_succ >= self._tau
         else:
-            allies = set(self.known_info.get("abyssal_allies", []))
-            has_self = self in team
-            has_ally = any(p in allies for p in team)
-
-            if has_self or has_ally:
-                # Want to approve, but add noise to avoid detection
-                # Self on team: almost always approve (but not 100%)
-                # Only ally: less eager — don't want correlated patterns
-                base_approve = 0.9 if has_self else 0.65
-                return random.random() < base_approve
-            else:
-                # No Abyssal on team: vote like a good player
-                p_succ = 1.0 - self._p_fail(team, wave)
-                if random.random() < 0.1:
-                    return random.choice([True, False])
-                return p_succ >= self._tau
+            # Abyssal: use cover beliefs to vote — our biased "good player"
+            # worldview naturally favors ally-containing teams and rejects
+            # clean teams, without needing hardcoded rules.
+            cover_p_succ = 1.0 - self._cover_p_fail(team, wave)
+            if self in team:
+                # I can sabotage, so I want this to pass — but if cover
+                # beliefs say this team looks terrible, a good player
+                # would reject even their own team. Follow cover to blend in.
+                if cover_p_succ < self._cover_tau:
+                    # Cover says reject; still approve sometimes since
+                    # we actually want to be on this mission
+                    return random.random() < 0.4
+                return True
+            return cover_p_succ >= self._cover_tau
 
     # ── Place bomb ───────────────────────────────────────────────
 
