@@ -25,7 +25,8 @@ class Player:
         raise NotImplementedError
 
     def vote(
-        self, team: list[Player], wave: int, proposal_num: int, max_proposals: int
+        self, team: list[Player], wave: int, proposal_num: int, max_proposals: int,
+        leader: Player | None = None,
     ) -> bool:
         """Vote approve (True) or reject (False) on a proposed team."""
         raise NotImplementedError
@@ -44,12 +45,14 @@ class Player:
         """Called after night phase to initialize belief model."""
 
     def observe_team_vote(
-        self, team: list[Player], votes: dict[Player, bool], wave: int
+        self, team: list[Player], votes: dict[Player, bool], wave: int,
+        leader: Player | None = None,
     ) -> None:
-        """Called after each vote with the team and all votes."""
+        """Called after each vote with the team, all votes, and the leader."""
 
     def observe_mission_result(
-        self, team: list[Player], num_fakes: int, wave: int
+        self, team: list[Player], num_fakes: int, wave: int,
+        leader: Player | None = None,
     ) -> None:
         """Called after each mission with the team and number of fake bombs."""
 
@@ -60,6 +63,11 @@ class Player:
 class HumanPlayer(Player):
     """Interactive human player via CLI."""
 
+    def __init__(self, name: str, role: Role):
+        super().__init__(name, role)
+        # Replaceable input function; Game sets this to _panel_input
+        self.input_fn: callable = input
+
     def propose_team(self, players, team_size, wave):
         print(f"\nYou are the leader! Propose a team of {team_size} for Wave {wave + 1}.")
         print("Available players:")
@@ -69,7 +77,7 @@ class HumanPlayer(Player):
 
         while True:
             try:
-                raw = input(f"Enter {team_size} player numbers separated by spaces: ").strip()
+                raw = self.input_fn(f"Enter {team_size} player numbers separated by spaces: ").strip()
                 indices = [int(x) - 1 for x in raw.split()]
                 if len(indices) != team_size:
                     print(f"Please select exactly {team_size} players.")
@@ -84,9 +92,9 @@ class HumanPlayer(Player):
             except (ValueError, IndexError):
                 print("Invalid input, try again.")
 
-    def vote(self, team, wave, proposal_num, max_proposals):
+    def vote(self, team, wave, proposal_num, max_proposals, leader=None):
         while True:
-            choice = input("Approve this team? (y/n): ").strip().lower()
+            choice = self.input_fn("Approve this team? (y/n): ").strip().lower()
             if choice in ("y", "yes"):
                 return True
             if choice in ("n", "no"):
@@ -99,7 +107,7 @@ class HumanPlayer(Player):
             return True
         # Abyssal human gets a choice
         while True:
-            choice = input("Place a [r]eal or [f]ake bomb? ").strip().lower()
+            choice = self.input_fn("Place a [r]eal or [f]ake bomb? ").strip().lower()
             if choice in ("r", "real"):
                 return True
             if choice in ("f", "fake"):
@@ -112,7 +120,7 @@ class HumanPlayer(Player):
             print(f"  {i + 1}. {p.name}")
         while True:
             try:
-                idx = int(input("Enter player number: ").strip()) - 1
+                idx = int(self.input_fn("Enter player number: ").strip()) - 1
                 if 0 <= idx < len(townsfolk):
                     return townsfolk[idx]
                 print("Invalid number.")
@@ -176,7 +184,7 @@ class AIPlayer(Player):
 
     # ── Vote ──────────────────────────────────────────────────────
 
-    def vote(self, team, wave, proposal_num, max_proposals):
+    def vote(self, team, wave, proposal_num, max_proposals, leader=None):
         # Last proposal — must approve to avoid Abyssal auto-win
         if proposal_num >= max_proposals - 1:
             return True

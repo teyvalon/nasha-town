@@ -331,7 +331,7 @@ class BayesianAIPlayer(Player):
 
     # ── Observation updates ──────────────────────────────────────
 
-    def observe_team_vote(self, team, votes, wave):
+    def observe_team_vote(self, team, votes, wave, leader=None):
         p_fail = self._p_fail(team, wave)
         p_succ = 1.0 - p_fail
 
@@ -528,7 +528,7 @@ class BayesianAIPlayer(Player):
 
     # ── Vote ─────────────────────────────────────────────────────
 
-    def vote(self, team, wave, proposal_num, max_proposals):
+    def vote(self, team, wave, proposal_num, max_proposals, leader=None):
         if proposal_num >= max_proposals - 1:
             return True
 
