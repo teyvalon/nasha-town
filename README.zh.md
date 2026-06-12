@@ -85,13 +85,14 @@
 uv run main.py
 ```
 
-启动后会提示选择玩家人数（5-8）、游戏模式（基础局 / 预言局 / 迷雾局）和 AI 版本（v1 规则型 / v2 贝叶斯型）。算法详见 [`ai-v1.md`](ai-v1.md) 和 [`ai-v2.md`](ai-v2.md)。
+启动后会提示选择玩家人数（5-8）、游戏模式（基础局 / 预言局 / 迷雾局）、AI 版本（v1 规则型 / v2 贝叶斯均场型 / v3 贝叶斯联合分布型）、随机种子、每轮最大组队次数及角色选择。游戏过程中，终端右侧会实时显示 AI 信念面板（可通过 `--no-panel` 关闭）。算法详见 [`ai-v1.md`](ai-v1.md)、[`ai-v2.md`](ai-v2.md) 和 [`ai-v3.md`](ai-v3.md)。
 
 **平衡性测试：**
 
 ```bash
-uv run benchmark.py         # 默认：v2, 500 局
-uv run benchmark.py v1 100  # v1 AI, 100 局
+uv run benchmark.py             # 默认：v3, 500 局
+uv run benchmark.py v1 100      # v1 AI, 100 局
+uv run benchmark.py v3 1000 8   # v3 AI, 1000 局, 8 进程
 ```
 
 ## 游戏社区

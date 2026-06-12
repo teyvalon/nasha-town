@@ -3,9 +3,9 @@
 A social deduction Milistra Wonderland in Genshin Impact.
 
 * America: [24713621224](https://act.hoyolab.com/ys/ugc_community/mx/#/pages/level-detail/index?id_region=24713621224___os_usa)
-* Europe:
-* Asia:
-* TW,HK,MO:
+* Europe: [24883361226](https://act.hoyolab.com/ys/ugc_community/mx/#/pages/level-detail/index?id_region=24883361226___os_euro)
+* Asia: [21623772146](https://act.hoyolab.com/ys/ugc_community/mx/#/pages/level-detail/index?id_region=21623772146___os_asia)
+* TW,HK,MO: TBD
 * [国区](README.zh.md)
 
 TEYVALON is inspired by the classic board game [The Resistance: Avalon](https://boardgamegeek.com/boardgame/128882/the-resistance-avalon) by Don Eskridge.
@@ -116,14 +116,18 @@ with AI opponents filling the remaining seats.
 uv run main.py
 ```
 
-You will be prompted to choose the number of players (5-8), game mode (Basic / Prophecy / Veil), and AI version
-(v1 rule-based or v2 Bayesian). See [`ai-v1.md`](ai-v1.md) and [`ai-v2.md`](ai-v2.md) for algorithm details.
+You will be prompted to choose the number of players (5-8), game mode (Basic / Prophecy / Veil), AI version
+(v1 rule-based, v2 Bayesian mean-field, or v3 Bayesian joint distribution), random seed, max proposals per wave,
+and your role. A real-time belief panel is shown on the right side of the terminal during gameplay (disable with
+`--no-panel`). See [`ai-v1.md`](ai-v1.md), [`ai-v2.md`](ai-v2.md), and [`ai-v3.md`](ai-v3.md) for algorithm
+details.
 
 **Benchmark:**
 
 ```bash
-uv run benchmark.py         # default: v2, 500 games
-uv run benchmark.py v1 100  # v1 AI, 100 games
+uv run benchmark.py             # default: v3, 500 games
+uv run benchmark.py v1 100      # v1 AI, 100 games
+uv run benchmark.py v3 1000 8   # v3 AI, 1000 games, 8 workers
 ```
 
 ## Community
