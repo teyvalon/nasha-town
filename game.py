@@ -16,6 +16,7 @@ from config import (
     Role,
 )
 from player import AIPlayer, HumanPlayer, Player
+from ui import BeliefPanel
 
 # ANSI color helpers
 CYAN = "\033[96m"
@@ -34,12 +35,16 @@ class Game:
         mode: GameMode = GameMode.PROPHECY,
         max_proposals: int = DEFAULT_MAX_PROPOSALS,
         ai_class: type[Player] = AIPlayer,
+        human_role: Role | None = None,
+        belief_panel: bool = True,
     ):
         assert num_players in CAMP_SIZES, f"Unsupported player count: {num_players}"
         self.num_players = num_players
         self.mode = mode
         self.max_proposals = max_proposals
         self.ai_class = ai_class
+        self.human_role = human_role
+        self.panel = BeliefPanel(enabled=belief_panel)
         self.players: list[Player] = []
         self.wave_sizes = WAVE_TEAM_SIZES[num_players]
         self.town_score = 0
@@ -52,8 +57,17 @@ class Game:
         roles = self._make_roles()
         random.shuffle(roles)
 
+        # If a specific human role is requested, swap it to position 0
+        if self.human_role is not None:
+            for i, r in enumerate(roles):
+                if r == self.human_role:
+                    roles[0], roles[i] = roles[i], roles[0]
+                    break
+
         # First player is always the human
-        self.players.append(HumanPlayer("You", roles[0]))
+        human = HumanPlayer("You", roles[0])
+        human.input_fn = self._panel_input
+        self.players.append(human)
         for i in range(1, self.num_players):
             self.players.append(self.ai_class(AI_NAMES[i - 1], roles[i]))
 
@@ -92,6 +106,49 @@ class Game:
                 ]
                 random.shuffle(moon_players)
                 p.known_info["moon_power_players"] = moon_players
+
+    def _panel_input(self, prompt: str = "") -> str:
+        """input() with belief panel shown during the wait."""
+        self._update_panel()
+        self.panel.show()
+        try:
+            result = input(prompt)
+        finally:
+            self.panel.hide()
+        return result
+
+    def _update_panel(self) -> None:
+        """Refresh the belief panel showing all AIs' beliefs."""
+        if not self.panel.enabled:
+            return
+        observers = []
+        for ai in self.players:
+            if isinstance(ai, HumanPlayer):
+                continue
+            if not hasattr(ai, '_b'):
+                continue
+
+            # Everyone shows their beliefs (joint-based)
+            label = ai.role.display_name if ai.role in (Role.COLUMBINA, Role.RERIR, Role.DOTTORE, Role.LAUMA) else ""
+            joint_len = len(ai._joint) if hasattr(ai, '_joint') else 0
+            suffix = f"({label} j={joint_len})" if label else f"(j={joint_len})"
+            observers.append((
+                ai.name, suffix,
+                self.players,
+                (lambda a: lambda p: a._b(p))(ai),
+            ))
+
+            # Rerir: also show moon-hunt scores
+            if ai.role == Role.RERIR and hasattr(ai, '_columbina_scores'):
+                scores = ai._columbina_scores()
+                if scores:
+                    observers.append((
+                        ai.name, "(moon hunt)",
+                        list(scores.keys()),
+                        (lambda s: lambda p: s.get(p, 0.0))(scores),
+                    ))
+        if observers:
+            self.panel.update(observers)
 
     # ── Display helpers ───────────────────────────────────────────────
 
@@ -134,11 +191,14 @@ class Game:
                 print(f"\n  {BOLD}{GREEN}*** YOU WIN! ***{RESET}")
             else:
                 print(f"\n  {BOLD}{RED}*** YOU LOSE ***{RESET}")
+        self.panel.cleanup()
 
     # ── Main game loop ────────────────────────────────────────────────
 
     def run(self) -> None:
         self.setup()
+        self.panel.setup()
+        self._update_panel()
 
         print(f"\nGame Mode: {self.mode.value} | Players: {self.num_players}")
         player_list = ", ".join(p.name for p in self.players)
@@ -197,21 +257,21 @@ class Game:
             team_names = ", ".join(f"{BOLD}{p.name}{RESET}" for p in team)
             print(f"Proposed team: [{team_names}]")
 
-            approved = self._vote(team, wave, proposal)
+            approved = self._vote(team, wave, proposal, leader)
             if approved:
-                return self._execute_mission(team, wave)
+                return self._execute_mission(team, wave, leader)
 
             # Rejected — rotate leader
             self.leader_idx = (self.leader_idx + 1) % self.num_players
 
         return None
 
-    def _vote(self, team: list[Player], wave: int, proposal: int) -> bool:
+    def _vote(self, team: list[Player], wave: int, proposal: int, leader: Player = None) -> bool:
         """Everyone votes. Returns True if majority approves."""
         votes: dict[Player, bool] = {}
         for p in self.players:
 
-            votes[p] = p.vote(team, wave, proposal, self.max_proposals)
+            votes[p] = p.vote(team, wave, proposal, self.max_proposals, leader=leader)
 
         approve = sum(1 for v in votes.values() if v)
         reject = self.num_players - approve
@@ -224,9 +284,12 @@ class Game:
                 print(f"{RED}{p.name}:N{RESET}  ", end="")
         print(f"\nResult: {CYAN}{approve} approve{RESET} / {RED}{reject} reject{RESET}", end="")
 
-        # Notify all players of the vote outcome
-        for p in self.players:
-            p.observe_team_vote(team, votes, wave)
+        # Notify all players — skip belief update on last proposal
+        # (forced approval has no information value)
+        if proposal < self.max_proposals - 1:
+            for p in self.players:
+                p.observe_team_vote(team, votes, wave, leader)
+        self._update_panel()
 
         if approve > self.num_players / 2:
             print(f" — {GREEN}Approved!{RESET}")
@@ -235,7 +298,7 @@ class Game:
             print(f" — {RED}Rejected!{RESET}")
             return False
 
-    def _execute_mission(self, team: list[Player], wave: int) -> bool:
+    def _execute_mission(self, team: list[Player], wave: int, leader: Player = None) -> bool:
         """Team places bombs. Returns True if townsfolk win this wave."""
         print("\nTeam enters the abyss mist...")
 
@@ -258,7 +321,8 @@ class Game:
 
         # Notify all players of mission result
         for p in self.players:
-            p.observe_mission_result(team, fake_count, wave)
+            p.observe_mission_result(team, fake_count, wave, leader=leader)
+        self._update_panel()
 
         # Rotate leader after mission
         self.leader_idx = (self.leader_idx + 1) % self.num_players
