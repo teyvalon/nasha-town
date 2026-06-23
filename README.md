@@ -5,7 +5,7 @@ A social deduction Milistra Wonderland in Genshin Impact.
 * America: [24713621224](https://act.hoyolab.com/ys/ugc_community/mx/#/pages/level-detail/index?id_region=24713621224___os_usa)
 * Europe: [24883361226](https://act.hoyolab.com/ys/ugc_community/mx/#/pages/level-detail/index?id_region=24883361226___os_euro)
 * Asia: [21623772146](https://act.hoyolab.com/ys/ugc_community/mx/#/pages/level-detail/index?id_region=21623772146___os_asia)
-* TW,HK,MO: TBD
+* TW,HK,MO: [25005157803](https://act.hoyolab.com/ys/ugc_community/mx/#/pages/level-detail/index?id_region=25005157803___os_cht)
 * [国区](README.zh.md)
 
 TEYVALON is inspired by the classic board game [The Resistance: Avalon](https://boardgamegeek.com/boardgame/128882/the-resistance-avalon) by Don Eskridge.

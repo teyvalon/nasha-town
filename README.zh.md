@@ -3,7 +3,7 @@
 提瓦隆是一款《原神》千星奇域的社交推理游戏，其灵感来自于 Don Eskridge
 的经典桌游[《抵抗组织：阿瓦隆》](https://boardgamegeek.com/boardgame/128882/the-resistance-avalon)。
 
-* 奇域 GUID：
+* 奇域 GUID：[24426141272](https://act.miyoushe.com/ys/ugc_community/mx/#/pages/level-detail/index?id=24426141272&region=cn_gf01)
 * [美区及其他海外玩家见英文版](README.md)
 
 ## 上手指南
